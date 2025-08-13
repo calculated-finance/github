@@ -1,0 +1,35 @@
+name: aws-auth
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      role_name:
+        type: string
+        required: true
+jobs:
+  resolve-and-configure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve AWS account & region from org variable
+        id: resolve
+        env:
+          AWS_MAP: ${{ vars.AWS_ENV_MAP }}
+          ENV_IN: ${{ inputs.environment }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const map = JSON.parse(process.env.AWS_MAP || '{}');
+            const env = process.env.ENV_IN;
+            const cfg = map[env];
+            if (!cfg) core.setFailed(`No config for environment '${env}'.`);
+            core.setOutput('account_id', cfg.account_id);
+            core.setOutput('region', cfg.region);
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ steps.resolve.outputs.account_id }}:role/github-deployer
+          aws-region: ${{ steps.resolve.outputs.region }}
+          role-session-name: github-${{ github.repository_id }}-${{ github.run_id }}
